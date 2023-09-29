@@ -2,139 +2,161 @@
 
 namespace MHServerEmu.GameServer.GameData.Gpak.FileFormats
 {
-    public enum DataDirectoryHeader
+    /// <summary>
+    /// An abstract class for data directory entries of all types.
+    /// </summary>
+    public abstract class DataDirectoryRecord { }
+
+    /// <summary>
+    /// An interface for data directory entries that contain actual data.
+    /// </summary>
+    public interface IDataRecord
     {
-        Blueprint = 0xB524442,      // BDR
-        Curve = 0xB524443,          // CDR
-        Type = 0xB524454,           // TDR
-        Replacement = 0xB524452,    // RDR
-        Prototype = 0xB524450       // PDR
+        public ulong Id { get; }            // Hashed file path
+        public ulong Guid { get; }
+        public string FilePath { get; }
     }
 
     public class DataDirectory
     {
-        public DataDirectoryHeader Header { get; }
-        public DataDirectoryEntry[] Entries { get; }
-        public Dictionary<ulong, DataDirectoryEntry> IdDict { get; }
-        public Dictionary<string, DataDirectoryEntry> FilePathDict { get; }
+        public FileHeader Header { get; }
+        public DataDirectoryRecord[] Records { get; }
+        public Dictionary<ulong, IDataRecord> IdDict { get; }
+        public Dictionary<string, IDataRecord> FilePathDict { get; }
 
         public DataDirectory(byte[] data)
         {
             using (MemoryStream stream = new(data))
             using (BinaryReader reader = new(stream))
             {
-                Header = (DataDirectoryHeader)reader.ReadUInt32();
-                Entries = new DataDirectoryEntry[reader.ReadUInt32()];
+                Header = reader.ReadHeader();
+                Records = new DataDirectoryRecord[reader.ReadUInt32()];
 
-                switch (Header)
+                switch (Header.Magic)
                 {
-                    case DataDirectoryHeader.Type:
-                        for (int i = 0; i < Entries.Length; i++)
-                            Entries[i] = new DataDirectoryAssetTypeEntry(reader);
+                    case "CDR":     // Curve
+                        for (int i = 0; i < Records.Length; i++)
+                            Records[i] = new DataDirectoryCurveRecord(reader);
                         break;
-                    case DataDirectoryHeader.Curve:
-                        for (int i = 0; i < Entries.Length; i++)
-                            Entries[i] = new DataDirectoryCurveEntry(reader);
+                    case "TDR":     // Asset Type
+                        for (int i = 0; i < Records.Length; i++)
+                            Records[i] = new DataDirectoryAssetTypeRecord(reader);
                         break;
-                    case DataDirectoryHeader.Blueprint:
-                        for (int i = 0; i < Entries.Length; i++)
-                            Entries[i] = new DataDirectoryBlueprintEntry(reader);
+                    case "BDR":     // Blueprint
+                        for (int i = 0; i < Records.Length; i++)
+                            Records[i] = new DataDirectoryBlueprintRecord(reader);
                         break;
-                    case DataDirectoryHeader.Replacement:
-                        for (int i = 0; i < Entries.Length; i++)
-                            Entries[i] = new DataDirectoryEntry(reader);
+                    case "PDR":     // Prototype
+                        for (int i = 0; i < Records.Length; i++)
+                            Records[i] = new DataDirectoryPrototypeRecord(reader);
                         break;
-                    case DataDirectoryHeader.Prototype:
-                        for (int i = 0; i < Entries.Length; i++)
-                            Entries[i] = new DataDirectoryPrototypeEntry(reader);
+                    case "RDR":     // Replacement
+                        for (int i = 0; i < Records.Length; i++)
+                            Records[i] = new DataDirectoryReplacementRecord(reader);
                         break;
                 }
 
-                IdDict = new(Entries.Length);
-                foreach (DataDirectoryEntry entry in Entries)
-                    IdDict.Add(entry.Id, entry);
-
-                if (Header != DataDirectoryHeader.Replacement)  // Replacement directory contains duplicate strings, so we can't build a second dictionary out of it
+                // Replacement directory doesn't contain any actual data
+                if (Header.Magic != "RDR")  
                 {
-                    FilePathDict = new(Entries.Length);
-                    foreach (DataDirectoryEntry entry in Entries)
-                        FilePathDict.Add(entry.FilePath, entry);
+                    IdDict = new(Records.Length);
+                    FilePathDict = new(Records.Length);
+
+                    foreach (IDataRecord record in Records)
+                    {
+                        IdDict.Add(record.Id, record);
+                        FilePathDict.Add(record.FilePath, record);
+                    }   
                 }
             }
         }
     }
 
-    public class DataDirectoryEntry             // RDR and parent for other directories
+    public class DataDirectoryCurveRecord : DataDirectoryRecord, IDataRecord     // CDR
     {
-        public ulong Id { get; protected set; }
-        public ulong Guid { get; protected set; }
-        public string FilePath { get; protected set; }
+        public ulong Id { get; }
+        public ulong Guid { get; }
+        public byte ByteField { get; }
+        public string FilePath { get; }
 
-        public DataDirectoryEntry() { }
-
-        public DataDirectoryEntry(BinaryReader reader)
-        {
-            Id = reader.ReadUInt64();
-            Guid = reader.ReadUInt64();
-            FilePath = reader.ReadFixedString16().Replace('\\', '/');
-        }
-    }
-
-    public class DataDirectoryAssetTypeEntry : DataDirectoryEntry   // TDR
-    {
-        public byte Field2 { get; }
-        public AssetType AssetType { get; set; }
-
-        public DataDirectoryAssetTypeEntry(BinaryReader reader)
-        {
-            Id = reader.ReadUInt64();
-            Guid = reader.ReadUInt64();
-            Field2 = reader.ReadByte();
-            FilePath = reader.ReadFixedString16().Replace('\\', '/');
-        }
-    }
-
-    public class DataDirectoryCurveEntry : DataDirectoryEntry   // CDR
-    {
-        public byte Field2 { get; }
         public Curve Curve { get; set; }
 
-        public DataDirectoryCurveEntry(BinaryReader reader)
+        public DataDirectoryCurveRecord(BinaryReader reader)
         {
             Id = reader.ReadUInt64();
             Guid = reader.ReadUInt64();
-            Field2 = reader.ReadByte();
+            ByteField = reader.ReadByte();
             FilePath = reader.ReadFixedString16().Replace('\\', '/');
         }
     }
 
-    public class DataDirectoryBlueprintEntry : DataDirectoryEntry
+    public class DataDirectoryAssetTypeRecord : DataDirectoryRecord, IDataRecord     // TDR
     {
-        public byte Field2 { get; }
+        public ulong Id { get; }
+        public ulong Guid { get; }
+        public byte ByteField { get; }
+        public string FilePath { get; }
+
+        public AssetType AssetType { get; set; }
+
+        public DataDirectoryAssetTypeRecord(BinaryReader reader)
+        {
+            Id = reader.ReadUInt64();
+            Guid = reader.ReadUInt64();
+            ByteField = reader.ReadByte();
+            FilePath = reader.ReadFixedString16().Replace('\\', '/');
+        }
+    }
+
+    public class DataDirectoryBlueprintRecord : DataDirectoryRecord, IDataRecord // BDR
+    {
+        public ulong Id { get; }
+        public ulong Guid { get; }
+        public byte ByteField { get; }
+        public string FilePath { get; }
+
         public Blueprint Blueprint { get; set; }
 
-        public DataDirectoryBlueprintEntry(BinaryReader reader)
+        public DataDirectoryBlueprintRecord(BinaryReader reader)
         {
             Id = reader.ReadUInt64();
             Guid = reader.ReadUInt64();
-            Field2 = reader.ReadByte();
+            ByteField = reader.ReadByte();
             FilePath = reader.ReadFixedString16().Replace('\\', '/');
         }
     }
 
-    public class DataDirectoryPrototypeEntry : DataDirectoryEntry      // PDR
+    public class DataDirectoryPrototypeRecord : DataDirectoryRecord, IDataRecord // PDR
     {
+        public ulong Id { get; }
+        public ulong Guid { get; }
         public ulong ParentId { get; }
-        public byte Field3 { get; }
+        public byte ByteField { get; }
+        public string FilePath { get; }
+
         public Prototype Prototype { get; set; }
 
-        public DataDirectoryPrototypeEntry(BinaryReader reader)
+        public DataDirectoryPrototypeRecord(BinaryReader reader)
         {
             Id = reader.ReadUInt64();
             Guid = reader.ReadUInt64();
             ParentId = reader.ReadUInt64();
-            Field3 = reader.ReadByte();
+            ByteField = reader.ReadByte();
             FilePath = reader.ReadFixedString16().Replace('\\', '/');
+        }
+    }
+
+    public class DataDirectoryReplacementRecord : DataDirectoryRecord   // RDR
+    {
+        public ulong OldGuid { get; }
+        public ulong NewGuid { get; }
+        public string Name { get; }
+
+        public DataDirectoryReplacementRecord(BinaryReader reader)
+        {
+            OldGuid = reader.ReadUInt64();
+            NewGuid = reader.ReadUInt64();
+            Name = reader.ReadFixedString16();
         }
     }
 }

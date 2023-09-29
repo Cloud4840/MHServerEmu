@@ -12,6 +12,7 @@ namespace MHServerEmu.GameServer.Regions
             RegionPrototype.AvengersTowerHUBRegion,
             RegionPrototype.NPEAvengersTowerHUBRegion,
             RegionPrototype.TrainingRoomSHIELDRegion,
+            RegionPrototype.HoloSimARegion1to60,
             RegionPrototype.XaviersMansionRegion,
             RegionPrototype.HelicarrierRegion,
             RegionPrototype.AsgardiaRegion,
@@ -40,6 +41,19 @@ namespace MHServerEmu.GameServer.Regions
             RegionPrototype.CosmicDoopSectorSpaceRegion
         };
 
+        // TODO: Determine if a region is a hub from its prototype
+        private static readonly RegionPrototype[] HubRegions = new RegionPrototype[]
+        {
+            RegionPrototype.AvengersTowerHUBRegion,
+            RegionPrototype.NPEAvengersTowerHUBRegion,
+            RegionPrototype.TrainingRoomSHIELDRegion,
+            RegionPrototype.XaviersMansionRegion,
+            RegionPrototype.HelicarrierRegion,
+            RegionPrototype.AsgardiaRegion,
+            RegionPrototype.GenoshaHUBRegion,
+            RegionPrototype.DangerRoomHubRegion
+        };
+
         private readonly Dictionary<RegionPrototype, Region> _regionDict;
 
         public RegionManager()
@@ -64,6 +78,7 @@ namespace MHServerEmu.GameServer.Regions
         }
 
         public static bool IsRegionAvailable(RegionPrototype prototype) => AvailableRegions.Contains(prototype);
+        public static bool RegionIsHub(RegionPrototype prototype) => HubRegions.Contains(prototype);
 
         private static Region LoadRegionData(RegionPrototype prototype)
         {
@@ -163,6 +178,30 @@ namespace MHServerEmu.GameServer.Regions
                     region.EntranceOrientation = new(-1.5625f, 0f, 0f);
                     region.WaypointPosition = new(-2943.875f, 256f, 308f);
                     region.WaypointOrientation = new();
+
+                    break;
+
+                case RegionPrototype.HoloSimARegion1to60:
+                    archiveData = new byte[] {
+                    };
+
+                    region = new(RegionPrototype.HoloSimARegion1to60,
+                        1153032328761311241,
+                        740100172,
+                        archiveData,
+                        new(-2432.0f, -2432.0f, -2432.0f),
+                        new(2432.0f, 2432.0f, 2432.0f),
+                        new(10, DifficultyTier.Normal));
+
+                        area = new(1,(AreaPrototype)GameDatabase.GetPrototypeId("Regions/EndGame/TierX/HoloSim/HoloSimAArea.prototype"), new(), true);
+                        area.AddCell(new(1, GameDatabase.GetPrototypeId("Resource/Cells/EndGame/DR_Survival_A.cell"), new()));
+
+                        region.AddArea(area);
+
+                    region.EntrancePosition = new(-2004.0f, -896.0f, 184.0f);
+                    region.EntranceOrientation = new();
+                    region.WaypointPosition = new(-2004.0f, -896.0f, 184.0f);
+                    region.WaypointOrientation = new(1.5625f, 0f, 0f);
 
                     break;
 
